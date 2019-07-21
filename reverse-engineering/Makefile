@@ -3,14 +3,18 @@ SHELL=/bin/bash
 .SHELLFLAGS = -e -u -c
 .ONESHELL:
 
-WORK_FOLDER_PATH = work
+WORK_FOLDER_PATH = /tmp/reverse-engineering/work
 PORT = 8080
+FCGIWRAP_SOCK_NAME = fcgiwrap.sock
+FCGI_SCRIPT_FILENAME = /usr/lib/git-core/git-http-backend
 
 $(WORK_FOLDER_PATH)/nginx/nginx.conf: $(WORK_FOLDER_PATH)/nginx/mime.types $(WORK_FOLDER_PATH)/nginx/fastcgi_params
 	mkdir -p "$(WORK_FOLDER_PATH)/nginx"
 	sed -r \
 		-e "s,%\{WORK_FOLDER_PATH\},$$( readlink -f '$(WORK_FOLDER_PATH)' ),g" \
 		-e "s,%\{PORT\},$(PORT),g" \
+		-e "s,%\{FCGIWRAP_SOCK_NAME\},$(FCGIWRAP_SOCK_NAME),g" \
+		-e "s,%\{FCGI_SCRIPT_FILENAME\},$(FCGI_SCRIPT_FILENAME),g" \
 		"nginx.conf.tpl" \
 		> "$(WORK_FOLDER_PATH)/nginx/nginx.conf"
 	nginx \
@@ -42,7 +46,7 @@ fcgiwrap:
 	mkdir -p "$(WORK_FOLDER_PATH)/fcgiwrap"
 	fcgiwrap \
 		-c 2 \
-		-s "unix:$(WORK_FOLDER_PATH)/fcgiwrap/fcgiwrap.sock"
+		-s "unix:$(WORK_FOLDER_PATH)/fcgiwrap/$(FCGIWRAP_SOCK_NAME)"
 
 .PHONY: nginx
 nginx: $(WORK_FOLDER_PATH)/nginx/nginx.conf $(WORK_FOLDER_PATH)/git/config
@@ -54,7 +58,9 @@ nginx: $(WORK_FOLDER_PATH)/nginx/nginx.conf $(WORK_FOLDER_PATH)/git/config
 .PHONY: supervisor
 supervisor:
 	mkdir -p "$(WORK_FOLDER_PATH)/supervisor"
+	NODE_PATH="/usr/lib/node_modules" \
 	WORK_FOLDER_PATH="$(WORK_FOLDER_PATH)" \
+	FCGI_SCRIPT_FILENAME="$(FCGI_SCRIPT_FILENAME)" \
 		supervisord \
 			-n \
 			-d "$(WORK_FOLDER_PATH)/supervisor" \
