@@ -23,6 +23,10 @@ lazy val root = (project in file("."))
     libraryDependencies ++= Dependencies.cats,
     libraryDependencies ++= Dependencies.http4s,
     libraryDependencies ++= Dependencies.logback,
+    libraryDependencies ++= Dependencies.nuProcess,
+    libraryDependencies ++= Dependencies.apacheCommons,
+    libraryDependencies ++= Dependencies.guava,
+    libraryDependencies ++= Dependencies.jUnixSocket,
 
     // The main goal here: remove this old library dependency
     libraryDependencies += "org.jfastcgi.client" % "client-core" % "2.4-SNAPSHOT",

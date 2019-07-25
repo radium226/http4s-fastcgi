@@ -67,4 +67,17 @@ object Dependencies {
     "io.circe" %% "circe-parser" % "0.11.1"
   )
 
+  lazy val nuProcess = Seq(
+    "com.zaxxer" % "nuprocess" % "1.2.4"
+  )
+
+  lazy val apacheCommons = Seq(
+    "commons-codec" % "commons-codec" % "1.12",
+    "commons-io" % "commons-io" % "2.6"
+  )
+
+  lazy val jUnixSocket = Seq(
+    "com.kohlschutter.junixsocket" % "junixsocket-core" % "2.2.0"
+  )
+
 }
