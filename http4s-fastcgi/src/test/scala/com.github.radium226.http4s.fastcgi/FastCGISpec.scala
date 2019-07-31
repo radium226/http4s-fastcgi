@@ -14,7 +14,10 @@ import java.nio.file.attribute.PosixFilePermissions
 import java.util
 
 import cats.implicits._
+import com.github.radium226.fs2.debug.HexDump
+import com.github.radium226.ansi._
 import com.google.common.io.{MoreFiles, RecursiveDeleteOption}
+import fs2.Pipe
 import org.newsclub.net.unix.{AFUNIXSocket, AFUNIXSocketAddress}
 import org.scalatest.{FlatSpec, Matchers}
 
@@ -29,7 +32,6 @@ abstract class FastCGISpec extends FlatSpec with Matchers {
   private def scriptResource(folderPath: Path, content: String): Resource[IO, Path] = {
     Resource.make[IO, Path]({
       for {
-        //_        <- IO(Files.createDirectories(folderPath))
         filePath <- IO.pure(folderPath.resolve("cgi.sh"))
         _         = println(s"filePath=${filePath}")
         _ <- IO(Files.write(filePath, content.getBytes(StandardCharsets.UTF_8)), StandardOpenOption.TRUNCATE_EXISTING)
@@ -43,9 +45,9 @@ abstract class FastCGISpec extends FlatSpec with Matchers {
     val socketFilePath = folderPath.resolve("fcgiwrap.sock")
     (Resource.make[IO, (Process, Path)]({
       for {
-        fcgiwrapProcess <- IO(new ProcessBuilder("fcgiwrap", "-f", "-c", "2", "-s", s"unix:${socketFilePath.toString}").directory(folderPath.toFile).inheritIO().start())
-        _               <- IO.sleep(1 second)
-      } yield (fcgiwrapProcess, socketFilePath)
+        process <- IO(new ProcessBuilder("fcgiwrap", "-f", "-c", "2", "-s", s"unix:${socketFilePath.toString}").directory(folderPath.toFile).inheritIO().start())
+        _       <- IO.sleep(1 second)
+      } yield (process, socketFilePath)
     })({ _ => pkill("fcgiwrap") /**> IO(Files.delete(socketFilePath))*/ }))
       .map({ case (_, socketFilePath) =>
         socketFilePath
@@ -80,6 +82,14 @@ abstract class FastCGISpec extends FlatSpec with Matchers {
     } yield (scriptFilePath, fcgiwrapSocket)).use({ case (scriptFilePath, fcgiwrapSocket) =>
       IO(println(scriptFilePath)) *> block(scriptFilePath, fcgiwrapSocket)
     }).unsafeRunSync()
+  }
+
+  def hexDump(color: Color): Pipe[IO, Byte, Unit] = { bytes =>
+    bytes.through(HexDump[IO].write)
+        .map({ line =>
+          s"${color}${line}${Color.reset}"
+        })
+        .showLinesStdOut
   }
 
 }

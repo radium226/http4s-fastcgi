@@ -4,7 +4,13 @@ package object fastcgi {
 
   type ID = Long
 
-  case class Param(name: String)
+  type Key = String
+
+  type Value = String
+
+  type Param = (Key, Value)
+
+  type Params = List[Param]
 
   object Param {
 

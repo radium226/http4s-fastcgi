@@ -51,12 +51,4 @@ class FirstSpec extends FastCGISpec {
       .concurrently(inputBytes.through(fs2.io.writeOutputStream[IO](IO(socket.getOutputStream), ExecutionContext.global)))
   }
 
-  def hexDump(color: String): Pipe[IO, Byte, Unit] = { bytes =>
-    bytes.through(HexDump[IO].write)
-      .map({ line =>
-        s"${color}${line}${Ansi.reset}"
-      })
-      .showLinesStdOut
-  }
-
 }
