@@ -37,7 +37,7 @@ object process {
           def drainInputStream: F[Unit] = {
             F.delay(inputStream.read()).flatMap({
               case -1 =>
-                println("Done! ")
+                //println("Done! ")
                 F.unit
               case outputByte =>
                 //println(s"outputByte=${outputByte}")

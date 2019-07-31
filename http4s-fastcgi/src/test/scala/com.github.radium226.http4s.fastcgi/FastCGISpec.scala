@@ -29,28 +29,27 @@ abstract class FastCGISpec extends FlatSpec with Matchers {
   private def scriptResource(folderPath: Path, content: String): Resource[IO, Path] = {
     Resource.make[IO, Path]({
       for {
+        //_        <- IO(Files.createDirectories(folderPath))
         filePath <- IO.pure(folderPath.resolve("cgi.sh"))
+        _         = println(s"filePath=${filePath}")
         _ <- IO(Files.write(filePath, content.getBytes(StandardCharsets.UTF_8)), StandardOpenOption.TRUNCATE_EXISTING)
         _ <- IO(Files.setPosixFilePermissions(filePath, PosixFilePermissions.fromString("r-x------")))
+        _        <- IO.sleep(1 second)
       } yield filePath
-    })({ filePath => IO.unit /*IO(Files.deleteIfExists(filePath))*/ })
+    })({ filePath => IO(Files.deleteIfExists(filePath)) })
   }
 
-  // socat -t100 -v -x UNIX-LISTEN:"%(ENV_WORK_FOLDER_PATH)s/fcgiwrap/fcgiwrap-sniffed.sock,mode=777,reuseaddr,fork" UNIX-CONNECT:"%(ENV_WORK_FOLDER_PATH)s/fcgiwrap/fcgiwrap.sock"
-  private def fcgiwrapResource(folderPath: Path): Resource[IO, Socket] = {
+  private def fcgiwrapResource(folderPath: Path): Resource[IO, Path] = {
     val socketFilePath = folderPath.resolve("fcgiwrap.sock")
-    val sniffedSocketFilePath = folderPath.resolve("fcgiwrap-sniffed.sock")
-    (Resource.make[IO, (Process, Process, Socket)]({
+    (Resource.make[IO, (Process, Path)]({
       for {
-        fcgiwrapProcess <- IO(new ProcessBuilder("fcgiwrap", "-f", "-c", "2", "-s", s"unix:${socketFilePath.toString}").inheritIO().start())
-        socatProcess    <- IO(new ProcessBuilder("socat", "-t100", "-v", "-x", s"UNIX-LISTEN:${sniffedSocketFilePath.toString},mode=777,reuseaddr,fork", s"UNIX-CONNECT:${socketFilePath.toString}").inheritIO().start())
+        fcgiwrapProcess <- IO(new ProcessBuilder("fcgiwrap", "-f", "-c", "2", "-s", s"unix:${socketFilePath.toString}").directory(folderPath.toFile).inheritIO().start())
         _               <- IO.sleep(1 second)
-        socket          <- IO(AFUNIXSocket.newInstance())
-        _               <- IO(socket.connect(new AFUNIXSocketAddress(sniffedSocketFilePath.toFile)))
-      } yield (fcgiwrapProcess, socatProcess, socket)
-    })({ case (fcgiwrapProcess, socatProcess, _) => pkill("socat") *> pkill("fcgiwrap") *> IO(Files.delete(socketFilePath)) }))
-      .map({ case (_, _, socket) => socket })
-
+      } yield (fcgiwrapProcess, socketFilePath)
+    })({ _ => pkill("fcgiwrap") /**> IO(Files.delete(socketFilePath))*/ }))
+      .map({ case (_, socketFilePath) =>
+        socketFilePath
+      })
   }
 
   private def pkill(pattern: String): IO[Unit] = {
@@ -60,16 +59,26 @@ abstract class FastCGISpec extends FlatSpec with Matchers {
   }
 
   private def tempFolderResource: Resource[IO, Path] = {
-    Resource.make[IO, Path](IO(/*Files.createTempDirectory("FastCGISpec")*/Paths.get("/tmp/FastCGISpec")))({ folderPath => /*IO(MoreFiles.deleteRecursively(folderPath, RecursiveDeleteOption.ALLOW_INSECURE))*/ IO.unit })
+    Resource.make[IO, Path](IO(Files.createTempDirectory("FastCGISpec")))({ folderPath => IO(MoreFiles.deleteRecursively(folderPath, RecursiveDeleteOption.ALLOW_INSECURE)) })
+  }
+
+  def socketResource(socketFilePath: Path): Resource[IO, Socket] = {
+    Resource.make[IO, Socket](for {
+      socket <- IO(AFUNIXSocket.newInstance())
+      _      <- IO(socket.connect(new AFUNIXSocketAddress(socketFilePath.toFile)))
+    } yield socket)({ socket =>
+      IO(socket.close())
+    })
   }
 
   def withContext(content: String)(block: (Path, Socket) => IO[Unit]): Unit = {
     (for {
-      tempFolder     <- tempFolderResource
-      scriptFilePath <- scriptResource(tempFolder, content)
-      fcgiwrapSocket <- fcgiwrapResource(tempFolder)
+      tempFolder      <- tempFolderResource
+      scriptFilePath  <- scriptResource(tempFolder, content)
+      socketFilePath  <- fcgiwrapResource(tempFolder)
+      fcgiwrapSocket  <- socketResource(socketFilePath)
     } yield (scriptFilePath, fcgiwrapSocket)).use({ case (scriptFilePath, fcgiwrapSocket) =>
-      block(scriptFilePath, fcgiwrapSocket)
+      IO(println(scriptFilePath)) *> block(scriptFilePath, fcgiwrapSocket)
     }).unsafeRunSync()
   }
 

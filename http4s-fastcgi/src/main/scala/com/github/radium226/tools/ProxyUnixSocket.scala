@@ -81,14 +81,11 @@ object ProxyUnixSocket extends IOApp {
     })({ socket => IO(println("Closing socket")) *> IO(socket.close()) })))
   }
 
-
   override def run(arguments: List[String]): IO[ExitCode] = {
     val socketFilePath = Paths.get("/tmp/reverse-engineering/work/fcgiwrap/fcgiwrap.sock")
     val proxySocketFilePath = Paths.get("/tmp/reverse-engineering/work/fcgiwrap/proxy-fcgiwrap.sock")
-    val hexDump = HexDump[IO]()
 
     (for {
-
       proxyServerSocket   <- Stream.eval[IO, ServerSocket](IO(AFUNIXServerSocket.newInstance()))
       _                   <- Stream.eval[IO, Unit](IO(proxyServerSocket.bind(new AFUNIXSocketAddress(proxySocketFilePath.toFile))))
       proxySocketResource <- accept(proxyServerSocket)
@@ -97,11 +94,15 @@ object ProxyUnixSocket extends IOApp {
         (for {
           socket      <- socketResource
           proxySocket <- proxySocketResource
-        } yield (socket, proxySocket)).use({ case (socket, proxySocket) =>
-          pump(socket, proxySocket)
-        })
+        } yield (socket, proxySocket))
+          .use({ case (socket, proxySocket) =>
+            pump(socket, proxySocket)
+          })
       })
-    } yield ()).compile.drain.as(ExitCode.Success)
+    } yield ())
+      .compile
+      .drain
+      .as(ExitCode.Success)
   }
 
 }
