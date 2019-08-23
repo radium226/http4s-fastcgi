@@ -84,6 +84,16 @@ abstract class FastCGISpec extends FlatSpec with Matchers {
     }).unsafeRunSync()
   }
 
+  def withFCGIWrap(content: String)(block: (Path, Path) => IO[Unit]): Unit = {
+    (for {
+      tempFolder      <- tempFolderResource
+      scriptFilePath  <- scriptResource(tempFolder, content)
+      socketFilePath  <- fcgiwrapResource(tempFolder)
+    } yield (scriptFilePath, socketFilePath)).use({ case (scriptFilePath, socketFilePath) =>
+      IO(println(scriptFilePath)) *> block(scriptFilePath, socketFilePath)
+    }).unsafeRunSync()
+  }
+
   def hexDump(color: Color): Pipe[IO, Byte, Unit] = { bytes =>
     bytes.through(HexDump[IO].write)
         .map({ line =>

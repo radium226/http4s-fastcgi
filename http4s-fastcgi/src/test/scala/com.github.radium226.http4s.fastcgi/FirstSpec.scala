@@ -32,17 +32,47 @@ class FirstSpec extends FastCGISpec {
       |echo '</html>'
       |exit 0
     """.stripMargin)({ (scriptFilePath, fastcgiSocket) =>
-    FastCGI[IO](scriptFilePath).flatMap(_.stream
-      //.map({ byte => println(s"byte=${byte}") ; byte })
-      .observe(hexDump(Ansi.blue))
-      .through(pipe(fastcgiSocket))
-      .observe(hexDump(Ansi.green))
-      //.through(text.utf8Decode[IO])
-      //.through(text.lines)
-      //.showLinesStdOut
-      .interruptAfter(5 seconds)
-      .compile
-      .drain
+    FastCGIRequest[IO](List("SCRIPT_FILENAME" -> scriptFilePath.toString)).flatMap(_.stream
+        //.map({ byte => println(s"byte=${byte}") ; byte })
+        .observe(hexDump(Ansi.blue))
+        .through(pipe(fastcgiSocket))
+        .observe(hexDump(Ansi.green))
+        //.through(text.utf8Decode[IO])
+        //.through(text.lines)
+        //.showLinesStdOut
+        .interruptAfter(5 seconds)
+        .compile
+        .drain
+    )
+  })
+
+  it should "also work" in withContext(
+    """#!/bin/bash
+      |
+      |echo "Content-type: text/html"
+      |echo ""
+      |echo '<html>'
+      |echo '<head>'
+      |echo '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">'
+      |echo '<title>Hello World</title>'
+      |echo '</head>'
+      |echo '<body>'
+      |echo "$( cat )"
+      |echo '</body>'
+      |echo '</html>'
+      |exit 0
+    """.stripMargin)({ (scriptFilePath, fastcgiSocket) =>
+    FastCGIRequest[IO](List("SCRIPT_FILENAME" -> scriptFilePath.toString), body = Stream[IO, Byte]("Kikoo".getBytes: _*)).flatMap(_.stream
+        //.map({ byte => println(s"byte=${byte}") ; byte })
+        .observe(hexDump(Ansi.blue))
+        .through(pipe(fastcgiSocket))
+        .observe(hexDump(Ansi.green))
+        //.through(text.utf8Decode[IO])
+        //.through(text.lines)
+        //.showLinesStdOut
+        .interruptAfter(5 seconds)
+        .compile
+        .drain
     )
   })
 
