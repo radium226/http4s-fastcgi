@@ -42,7 +42,7 @@ object FastCGI {
   val params: Byte = 4
   val stdin: Byte = 5
   val stdout: Byte = 6
-  val stdErr: Byte = 7
+  val stderr: Byte = 7
   val responder: Byte = 1
   val version = 1
   val keepConnected: Byte = 1

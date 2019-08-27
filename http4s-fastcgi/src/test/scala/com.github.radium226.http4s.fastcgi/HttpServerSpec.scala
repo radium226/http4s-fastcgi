@@ -15,7 +15,7 @@ class HttpServerSpec extends FastCGISpec {
     s"""#!/bin/bash
        |echo "Content-Type: text/plain"
        |echo ""
-       |echo "${"A" * 100000 }"
+       |echo "Hello!"
        |exit 0
     """.stripMargin)({ case (scriptFilePath, fastCGISocketFilePath) =>
       val fastCGI = FastCGI[IO](fastCGISocketFilePath)

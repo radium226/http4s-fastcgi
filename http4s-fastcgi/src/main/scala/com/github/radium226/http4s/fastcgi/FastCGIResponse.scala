@@ -48,6 +48,8 @@ object FastCGIResponse {
 
       case class Stdout(length: Int, padding: Int) extends State
 
+      case class Stderr(length: Int, padding: Int) extends State
+
       case object EndRequest extends State
 
     }
@@ -69,6 +71,9 @@ object FastCGIResponse {
 
               println(s"version=${version}, `type`=${`type`}, id=${id}, length=${length}, padding=${padding}")
               `type` match {
+                case FastCGI.stderr =>
+                  go(stream.flatMap({ bytes => Stream.chunk(Chunk.array(bytes)) }), Stderr(length, padding))
+
                 case FastCGI.stdout =>
                   go(stream.flatMap({ bytes => Stream.chunk(Chunk.array(bytes)) }), Stdout(length, padding))
 
@@ -104,6 +109,21 @@ object FastCGIResponse {
               for {
                 _ <- Pull.output1(byte)
                 _ <- go(stream, Stdout(length - 1, padding))
+              } yield ()
+            case None =>
+              println("We are here! ")
+              Pull.raiseError[F](new IllegalStateException())
+          })
+
+        case Stderr(0, padding) =>
+          go(stream, Iterate(padding))
+
+        case Stderr(length, padding) =>
+          stream.pull.uncons1.flatMap({
+            case Some((byte, stream)) =>
+              for {
+                _ <- Pull.eval(F.delay(Console.err.write(byte)))
+                _ <- go(stream, Stderr(length - 1, padding))
               } yield ()
             case None =>
               println("We are here! ")

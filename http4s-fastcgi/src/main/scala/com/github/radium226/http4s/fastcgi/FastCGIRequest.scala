@@ -34,7 +34,7 @@ object FastCGIRequest {
   }
 
   def wrap[F[_]](scriptFilePath: Path)(httpRequest: Request[F])(implicit F: Concurrent[F]): F[FastCGIRequest[F]] = {
-    FastCGIRequest[F](params = List("SCRIPT_NAME" -> scriptFilePath.toString)).map(_.wrap(httpRequest))
+    FastCGIRequest[F](params = List("SCRIPT_FILENAME" -> scriptFilePath.toString)).map(_.wrap(httpRequest))
   }
 
 }
