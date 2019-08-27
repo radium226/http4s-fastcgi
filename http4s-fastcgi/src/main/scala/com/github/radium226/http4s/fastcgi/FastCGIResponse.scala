@@ -1,11 +1,11 @@
 package com.github.radium226.http4s.fastcgi
 
-import java.util
+import java.util.{Arrays => JavaArrays}
 
 import cats.effect._
 import fs2._
 import cats.implicits._
-
+import fs2.Chunk.ByteBuffer
 import org.http4s._
 
 case class FastCGIResponse[F[_]](headers: FastCGIHeaders, body: FastCGIBody[F]) {
@@ -40,101 +40,130 @@ object FastCGIResponse {
     )
   }
 
-  private[fastcgi] def pushResponseWithBodyAndResponseBody[F[_]](responseWithoutBodyBridge: Bridge[F, FastCGIResponse[F]], responseBodyBridge: Bridge[F, Byte])(implicit F: Concurrent[F]): Pipe[F, Byte, Unit] = {
+  private[fastcgi] def iterateOverChunks[F[_]](implicit F: Concurrent[F]): Pipe[F, Byte, Byte] = {
     sealed trait State
-
     object State {
 
-      type ParamKey = String
+      case class Iterate(padding: Int) extends State
 
-      type ParamValue = String
+      case class Stdout(length: Int, padding: Int) extends State
 
-      case object Beginning extends State
-
-      case class Param(length: Int, response: FastCGIResponse[F], key: Option[ParamKey], value: Option[ParamValue]) extends State {
-
-        def appendToKey(char: Char): Param = {
-          copy(length = length - 1, key = key.map({ chars => Some(chars :+ char) }).getOrElse(Some(s"${char}")))
-        }
-
-        def appendToValue(char: Char): Param = {
-          copy(length = length - 1, value = value.map({ chars => Some(chars :+ char) }).getOrElse(Some(s"${char}")))
-        }
-
-        def empty(length: Int): Param = {
-          copy(length = length, response = response.withHeader(key.get, value.get), key = None, value = None)
-        }
-
-      }
-
-      case class Stdout(length: Int) extends State {
-
-        def readChar(char: Char): Stdout = {
-          copy(length = length - 1)
-        }
-
-      }
-
-      case class Body(length: Int) extends State
+      case object EndRequest extends State
 
     }
 
-    def go(stream: Stream[F, Byte], state: State): Pull[F, Unit, Unit] = {
+    import State._
+
+    def go(stream: Stream[F, Byte], state: State): Pull[F, Byte, Unit] = {
       state match {
-        case State.Beginning =>
-          stream.chunkN(8, true).map(_.toArray).pull.uncons1.flatMap({
+        case Iterate(padding) =>
+          println(s"padding=${padding}")
+          stream.drop(padding).chunkN(8, true).map(_.toArray).pull.uncons1.flatMap({
             case Some((bytes, stream)) =>
-              val version = bytes(0)
-              val `type` = bytes(1)
-              val id = ((bytes(2) << 8) + bytes(3)) & 0xff
-              val length = ((bytes(4) << 8) + bytes(5)) & 0xff
-              val padding = bytes(6)
+              val unsignedIntegers = bytes.map(_ & 0xff)
+              val version: Int = unsignedIntegers(0)
+              val `type`: Int = unsignedIntegers(1)
+              val id: Int = ((unsignedIntegers(2) << 8) + unsignedIntegers(3))
+              val length: Int = ((unsignedIntegers(4) << 8) + unsignedIntegers(5))
+              val padding: Int = unsignedIntegers(6)
+
               println(s"version=${version}, `type`=${`type`}, id=${id}, length=${length}, padding=${padding}")
               `type` match {
                 case FastCGI.stdout =>
-                  go(stream.flatMap({ bytes => Stream.chunk(Chunk.array(bytes)) }), State.Stdout(length))
+                  go(stream.flatMap({ bytes => Stream.chunk(Chunk.array(bytes)) }), Stdout(length, padding))
+
+                case FastCGI.endRequest =>
+                  go(stream.flatMap({ bytes => Stream.chunk(Chunk.array(bytes)) }), EndRequest)
+
+                case _ =>
+                  println("Unknown type")
+                  Pull.raiseError[F](new IllegalStateException())
               }
             case None =>
               Pull.raiseError[F](new IllegalStateException)
           })
 
-        case State.Stdout(length) =>
-          go(stream, State.Param(length, FastCGIResponse.empty[F], None, None))
+        case EndRequest =>
+          stream.chunkN(8, true).map(_.toArray).pull.uncons1.flatMap({
+            case Some((endRequestHeaderBytes, stream)) =>
+              val applicationStatus: Int = (endRequestHeaderBytes(0) << 24) + (endRequestHeaderBytes(1) << 16) + (endRequestHeaderBytes(2) << 8) + endRequestHeaderBytes(3)
+              val processStatus: Int = endRequestHeaderBytes(4)
+              println(s"applicationStatus=${applicationStatus} / processStatus=${processStatus}")
+              Pull.done
+            case None =>
+              Pull.raiseError[F](new IllegalStateException)
+          })
 
 
-        case State.Param(length, response, Some(key), None) =>
+        case Stdout(0, padding) =>
+          go(stream, Iterate(padding))
+
+        case Stdout(length, padding) =>
+          stream.pull.uncons1.flatMap({
+            case Some((byte, stream)) =>
+              for {
+                _ <- Pull.output1(byte)
+                _ <- go(stream, Stdout(length - 1, padding))
+              } yield ()
+            case None =>
+              println("We are here! ")
+              Pull.raiseError[F](new IllegalStateException())
+          })
+
+
+      }
+    }
+
+    { bytes =>
+      go(bytes, Iterate(0)).stream
+    }
+  }
+
+  private[fastcgi] def pushResponseWithBodyAndResponseBody[F[_]](responseWithoutBodyBridge: Bridge[F, FastCGIResponse[F]], responseBodyBridge: Bridge[F, Byte])(implicit F: Concurrent[F]): Pipe[F, Byte, Unit] = {
+    sealed trait State
+
+    object State {
+
+      case class Header(response: FastCGIResponse[F], name: Option[FastCGIHeaderName], value: Option[FastCGIHeaderValue]) extends State
+
+      case object Body extends State
+
+    }
+
+    def go(stream: Stream[F, Byte], state: State): Pull[F, Unit, Unit] = {
+      state match {
+        case State.Header(response, Some(name), None) =>
           stream.pull.uncons1.flatMap({
             case Some((byte, stream)) =>
               byte.toChar match {
                 case ':' =>
-                  go(stream, State.Param(length - 1, response, Some(key), Some("")))
+                  go(stream, State.Header(response, Some(name), Some("")))
 
                 case char =>
-                  go(stream, State.Param(length - 1, response, Some(s"${key}${char}"), None))
+                  go(stream, State.Header(response, Some(s"${name}${char}"), None))
               }
             case None =>
               Pull.raiseError[F](new IllegalArgumentException)
           })
 
-        case State.Param(length, response, None, None) =>
+        case State.Header(response, None, None) =>
           stream.pull.uncons1.flatMap({
             case Some((byte, stream)) =>
-              println(s"byte=${byte}")
               byte.toChar match {
                 case '\r' =>
                   for {
                     _ <- Pull.eval(responseWithoutBodyBridge.push1(response))
-                    _ <- go(stream.drop(1), State.Body(length - (1 + 1)))
+                    _ <- go(stream.drop(1), State.Body)
                   } yield ()
                 case char =>
                   println(s"char=${char}")
-                  go(stream, State.Param(length - 1, response, Some(s"${char}"), None))
+                  go(stream, State.Header(response, Some(s"${char}"), None))
               }
             case None =>
               Pull.raiseError[F](new IllegalStateException())
           })
         // Parsing header value
-        case State.Param(length, response, Some(name), Some(value)) =>
+        case State.Header(response, Some(name), Some(value)) =>
           stream.pull.uncons1.flatMap({
             case Some((byte, stream)) =>
               byte.toChar match {
@@ -145,37 +174,36 @@ object FastCGIResponse {
                     case '\n' =>
                       println("\\n")
                   }
-                  go(stream.drop(1), State.Param(length - (1 + 1), response.withHeader(name -> value), None, None))
+                  val header = name -> value
+                  println(s"header=${header}")
+                  go(stream.drop(1), State.Header(response.withHeader(header), None, None))
                 case char =>
-                  go(stream, State.Param(length - 1, response, Some(name), Some(value :+ char)))
+                  go(stream, State.Header(response, Some(name), Some(value :+ char)))
               }
             case None =>
               Pull.raiseError[F](new IllegalStateException())
           })
 
-        case State.Body(0) =>
-          /*for {
-            _ <- Pull.eval(responseBodyBridge.stop)
-            _ <- Pull.done
-          } yield ()*/
-          go(stream, State.Beginning)
-
-        case State.Body(length) =>
+        case State.Body =>
           stream.pull.uncons1.flatMap({
             case Some((byte, stream)) =>
               for {
                 _ <- Pull.eval(responseBodyBridge.push1(byte))
-                _ <- go(stream, State.Body(length - 1))
+                _ <- go(stream, State.Body)
               } yield ()
+
             case None =>
-              Pull.raiseError[F](new IllegalStateException())
+              for {
+                _ <- Pull.eval(responseBodyBridge.stop)
+                _ <- Pull.done
+              } yield ()
           })
 
       }
     }
 
     { bytes =>
-      go(bytes, State.Beginning).stream
+      go(bytes, State.Header(FastCGIResponse.empty[F], None, None)).stream
     }
   }
 
@@ -183,7 +211,7 @@ object FastCGIResponse {
     for {
       responseWithoutBodyBridge <- Bridge.start[F, FastCGIResponse[F]]
       responseBodyBridge        <- Bridge.start[F, Byte]
-      _                         <- F.start(bytes.through(pushResponseWithBodyAndResponseBody(responseWithoutBodyBridge, responseBodyBridge)).compile.drain)
+      _                         <- F.start(bytes.through(iterateOverChunks).through(pushResponseWithBodyAndResponseBody(responseWithoutBodyBridge, responseBodyBridge)).compile.drain)
       responseWithoutBody       <- responseWithoutBodyBridge.pull1
       responseBody               = responseBodyBridge.pull
       response                   = responseWithoutBody.withBody(responseBody)

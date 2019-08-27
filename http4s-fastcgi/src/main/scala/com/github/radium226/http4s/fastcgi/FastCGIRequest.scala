@@ -20,7 +20,7 @@ object FastCGIRequest {
     "REQUEST_URI" -> _.uri.renderString.some,
     "REQUEST_SCHEME" -> _.uri.scheme.map(_.toString),
     { _ => "GATEWAY_INTERFACE" -> Some("CGI/1.1") },
-    "SERVER_SOFTWARE" -> _.serverSoftware.toString.some,
+    "SERVER_SOFTWARE" -> _.serverSoftware.product.some,
     "REMOTE_ADDR" -> _.remoteAddr,
     "REMOTE_PORT" -> _.remotePort.map(_.toString),
     "SERVER_ADDR" -> _.serverAddr.some,
