@@ -1,5 +1,7 @@
 package com.github.radium226.http4s
 
+import org.http4s.{Request, Response}
+
 package object fastcgi {
 
   type ID = Long
@@ -41,5 +43,9 @@ package object fastcgi {
   }
 
   type FastCGISocket = java.net.Socket
+
+  type FastCGIParamReader[A] = PartialFunction[FastCGIParam, A => A]
+
+  type FastCGIParamWriter[A] = A => (FastCGIParamKey, Option[FastCGIParamValue])
 
 }

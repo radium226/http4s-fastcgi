@@ -1,6 +1,8 @@
 package com.github.radium226.http4s.fastcgi.parsing
 
-sealed trait State
+import com.github.radium226.http4s.fastcgi.FastCGIResponse
+
+sealed trait State[+F[_]]
 
 object State {
 
@@ -8,22 +10,32 @@ object State {
 
   type ParamValue = String
 
-  case class Param(length: Int, key: Option[ParamKey], value: Option[ParamValue]) extends State {
+  case object Beginning extends State[Nothing]
 
-    def appendToKey(char: Char): Param = {
+  case class Param[F[_]](length: Int, response: FastCGIResponse[F], key: Option[ParamKey], value: Option[ParamValue]) extends State[F] {
+
+    def appendToKey(char: Char): Param[F] = {
       copy(length = length - 1, key = key.map({ chars => Some(chars :+ char) }).getOrElse(Some(s"${char}")))
     }
 
-    def appendToValue(char: Char): Param = {
+    def appendToValue(char: Char): Param[F] = {
       copy(length = length - 1, value = value.map({ chars => Some(chars :+ char) }).getOrElse(Some(s"${char}")))
+    }
+
+    def empty(length: Int): Param[F] = {
+      copy(length = length, response = response.withHeader(key.get, value.get), key = None, value = None)
     }
 
   }
 
-  object Param {
+  case class Stdout(length: Int) extends State[Nothing] {
 
-    def empty(length: Int): Param = Param(length, None, None)
+    def readChar(char: Char): Stdout = {
+      copy(length = length - 1)
+    }
 
   }
+
+  case class Body(length: Int) extends State[Nothing]
 
 }

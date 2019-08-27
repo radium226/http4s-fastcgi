@@ -24,10 +24,9 @@ class EndToEndSpec extends FastCGISpec {
     val fastCGI = FastCGI[IO](fastCGISocketFilePath)
     for {
       fastCGIRequest  <- FastCGIRequest[IO](List("SCRIPT_FILENAME" -> scriptFilePath.toString))
-      count <- fastCGI.execute(fastCGIRequest) { response =>
-        response.body.compile.fold(0) { (count, _) => count + 1 }
-      }
-      _                = println(count)
+      fastCGIResponse <- fastCGI.run(fastCGIRequest)
+      body            <- fastCGIResponse.body.through(fs2.text.utf8Decode[IO]).compile.fold("")(_ + _)
+      _                = println(s"-->${body}<--")
     } yield ()
   })
 

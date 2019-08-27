@@ -32,7 +32,7 @@ $(WORK_FOLDER_PATH)/nginx/mime.types:
 $(WORK_FOLDER_PATH)/nginx/fastcgi_params:
 	mkdir -p "$(WORK_FOLDER_PATH)/nginx"
 	cp \
-		"/etc/nginx/fastcgi_params" \
+		"fastcgi_params" \
 		"$(WORK_FOLDER_PATH)/nginx/fastcgi_params"
 
 $(WORK_FOLDER_PATH)/git/config:

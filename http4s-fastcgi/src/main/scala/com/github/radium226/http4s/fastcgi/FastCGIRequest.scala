@@ -6,12 +6,35 @@ import cats.effect._
 import cats.effect.concurrent.MVar
 import fs2._
 import cats.implicits._
+import org.http4s.Request
+import org.http4s.blaze.http.HttpRequest
 
 
 object FastCGIRequest {
 
+  def paramWriters[F[_]]: List[FastCGIParamWriter[Request[F]]] = List(
+    "REQUEST_METHOD" -> _.method.name.some,
+    "QUERY_STRING" -> _.queryString.some,
+    "CONTENT_TYPE" -> _.contentType.map(_.value),
+    "CONTENT_LENGTH" -> _.contentLength.map(_.toString),
+    "REQUEST_URI" -> _.uri.renderString.some,
+    "REQUEST_SCHEME" -> _.uri.scheme.map(_.toString),
+    { _ => "GATEWAY_INTERFACE" -> Some("CGI/1.1") },
+    "SERVER_SOFTWARE" -> _.serverSoftware.toString.some,
+    "REMOTE_ADDR" -> _.remoteAddr,
+    "REMOTE_PORT" -> _.remotePort.map(_.toString),
+    "SERVER_ADDR" -> _.serverAddr.some,
+    "SERVER_PORT" -> _.serverPort.toString.some,
+    "PATH_INFO" -> _.pathInfo.some
+    // SERVER_NAME
+  )
+
   def apply[F[_]](params: FastCGIParams = List.empty, body: Stream[F, Byte] = Stream.empty)(implicit F: Concurrent[F]): F[FastCGIRequest[F]] = {
     MVar.of[F, Short](1).map(new FastCGIRequest[F](params, body, _))
+  }
+
+  def wrap[F[_]](scriptFilePath: Path)(httpRequest: Request[F])(implicit F: Concurrent[F]): F[FastCGIRequest[F]] = {
+    FastCGIRequest[F](params = List("SCRIPT_NAME" -> scriptFilePath.toString)).map(_.wrap(httpRequest))
   }
 
 }
@@ -75,4 +98,11 @@ class FastCGIRequest[F[_]](params: FastCGIParams, body: Stream[F, Byte], request
     body.chunks.flatMap({ c => record(FastCGI.stdin, c.size) ++ Stream.chunk(c) }) ++ record(FastCGI.stdin, 0)
   }
 
+  def wrap(httpRequest: Request[F]): FastCGIRequest[F] = {
+    new FastCGIRequest[F](
+      params = params ++ FastCGIRequest.paramWriters[F].map(_.apply(httpRequest)).collect({ case (key, Some(value)) => (key, value) }),
+      body = httpRequest.body,
+      requestIDMVar = requestIDMVar
+    )
+  }
 }
