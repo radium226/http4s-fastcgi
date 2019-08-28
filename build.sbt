@@ -27,13 +27,12 @@ lazy val root = (project in file("."))
     libraryDependencies ++= Dependencies.apacheCommons,
     libraryDependencies ++= Dependencies.guava,
     libraryDependencies ++= Dependencies.jUnixSocket,
-
-    // The main goal here: remove this old library dependency
-    libraryDependencies += "org.jfastcgi.client" % "client-core" % "2.4-SNAPSHOT",
+    libraryDependencies ++= Dependencies.scallop,
 
     resolvers += Resolver.sonatypeRepo("releases"),
     resolvers += Resolver.mavenLocal,
 
-    addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.8"),
     logBuffered in Test := false,
+
+    addCompilerPlugin(CompilerPlugins.kindProjector)
   )

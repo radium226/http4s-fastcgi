@@ -80,4 +80,8 @@ object Dependencies {
     "com.kohlschutter.junixsocket" % "junixsocket-core" % "2.2.0"
   )
 
+  lazy val scallop = Seq(
+    "org.rogach" %% "scallop" % "3.3.1"
+  )
+
 }
