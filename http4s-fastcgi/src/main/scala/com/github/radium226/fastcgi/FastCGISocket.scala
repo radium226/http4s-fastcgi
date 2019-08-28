@@ -1,11 +1,10 @@
-package com.github.radium226.http4s.fastcgi
-
-import java.net.Socket
+package com.github.radium226.fastcgi
 
 import cats.effect._
 import fs2._
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent._
+
 
 object FastCGISocket {
 

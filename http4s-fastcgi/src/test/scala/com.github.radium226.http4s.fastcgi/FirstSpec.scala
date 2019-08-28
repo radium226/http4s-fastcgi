@@ -5,13 +5,12 @@ import java.net.Socket
 import cats.effect._
 import fs2._
 import fs2.text
-import com.github.radium226.fs2.io.socket
+
+import com.github.radium226.ansi.Color
 
 import scala.concurrent.duration._
 import cats.implicits._
-import com.github.radium226.fs2.debug.HexDump
-import com.github.radium226.tools.Ansi
-
+import com.github.radium226.fastcgi.FastCGIRequest
 import scala.concurrent.ExecutionContext
 
 class FirstSpec extends FastCGISpec {
@@ -34,9 +33,9 @@ class FirstSpec extends FastCGISpec {
     """.stripMargin)({ (scriptFilePath, fastcgiSocket) =>
     FastCGIRequest[IO](List("SCRIPT_FILENAME" -> scriptFilePath.toString)).flatMap(_.stream
         //.map({ byte => println(s"byte=${byte}") ; byte })
-        .observe(hexDump(Ansi.blue))
+        .observe(hexDump(Color.blue))
         .through(pipe(fastcgiSocket))
-        .observe(hexDump(Ansi.green))
+        .observe(hexDump(Color.green))
         //.through(text.utf8Decode[IO])
         //.through(text.lines)
         //.showLinesStdOut
@@ -64,9 +63,9 @@ class FirstSpec extends FastCGISpec {
     """.stripMargin)({ (scriptFilePath, fastcgiSocket) =>
     FastCGIRequest[IO](List("SCRIPT_FILENAME" -> scriptFilePath.toString), body = Stream[IO, Byte]("Kikoo".getBytes: _*)).flatMap(_.stream
         //.map({ byte => println(s"byte=${byte}") ; byte })
-        .observe(hexDump(Ansi.blue))
+        .observe(hexDump(Color.blue))
         .through(pipe(fastcgiSocket))
-        .observe(hexDump(Ansi.green))
+        .observe(hexDump(Color.green))
         //.through(text.utf8Decode[IO])
         //.through(text.lines)
         //.showLinesStdOut

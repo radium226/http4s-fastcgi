@@ -1,12 +1,10 @@
-package com.github.radium226.http4s.fastcgi
-
-import java.util.{Arrays => JavaArrays}
+package com.github.radium226.fastcgi
 
 import cats.effect._
 import fs2._
 import cats.implicits._
-import fs2.Chunk.ByteBuffer
-import org.http4s._
+import com.github.radium226.fs2.concurrent.Bridge
+
 
 case class FastCGIResponse[F[_]](headers: FastCGIHeaders, body: FastCGIBody[F]) {
 
@@ -18,20 +16,9 @@ case class FastCGIResponse[F[_]](headers: FastCGIHeaders, body: FastCGIBody[F]) 
     copy(body = body)
   }
 
-  def unwrap(implicit F: Sync[F]): Response[F] = {
-    Response[F](
-      headers = Headers(headers.map({ case (name, value) => Header(name, value).parsed })),
-      body = body
-    )
-  }
-
 }
 
 object FastCGIResponse {
-
-  def headerReaders[F[_]] = List[FastCGIParamReader[Response[F]]](
-    { case ("STATUS", value) => _.withStatus(Status(code = value.toInt)) }
-  )
 
   def empty[F[_]]: FastCGIResponse[F] = {
     new FastCGIResponse[F](

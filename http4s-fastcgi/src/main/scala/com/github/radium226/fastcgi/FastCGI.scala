@@ -1,13 +1,13 @@
-package com.github.radium226.http4s.fastcgi
+package com.github.radium226.fastcgi
 
 import java.net.Socket
 import java.nio.file._
 
 import cats.effect._
-import fs2._
 import cats.implicits._
 import com.github.radium226.ansi.Color
 import com.github.radium226.fs2.debug.HexDump
+import fs2._
 import org.newsclub.net.unix.{AFUNIXSocket, AFUNIXSocketAddress}
 
 case class FastCGI[F[_]](socketFilePath: Path) {

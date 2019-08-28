@@ -51,29 +51,3 @@ case class HexDump[F[_]]() {
   }
 
 }
-
-
-
-object hexdump extends IOApp {
-
-
-
-  override def run(arguments: List[String]): IO[ExitCode] = {
-    val hexDump = HexDump[IO]()
-
-    fs2.io.file.readAll[IO](Paths.get("TOTO.txt"), ExecutionContext.global, 1024)
-      .through(hexDump.write)
-      .observe({ bytes =>
-        bytes
-          .through(hexDump.read)
-          .through(fs2.text.utf8Decode)
-          .through(fs2.text.lines)
-          .showLines(System.err)
-      })
-      .showLines(System.out)
-      .compile
-      .drain
-      .as(ExitCode.Success)
-  }
-
-}

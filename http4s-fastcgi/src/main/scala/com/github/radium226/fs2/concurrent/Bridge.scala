@@ -1,10 +1,11 @@
-package com.github.radium226.http4s.fastcgi
+package com.github.radium226.fs2.concurrent
 
-import cats.effect.Concurrent
-import fs2.{Pipe, Stream}
-import fs2.concurrent.{Queue, SignallingRef}
+import cats.effect._
+import fs2._
+import fs2.concurrent._
 
 import cats.implicits._
+
 
 case class Bridge[F[_], A](queue: Queue[F, A], signal: SignallingRef[F, Boolean]) {
 

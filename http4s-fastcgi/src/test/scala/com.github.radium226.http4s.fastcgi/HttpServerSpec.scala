@@ -7,6 +7,7 @@ import org.http4s._
 import org.http4s.dsl.io._
 import org.http4s.server.blaze.BlazeServerBuilder
 import cats.effect.implicits._
+import com.github.radium226.fastcgi.{FastCGI, FastCGIRequest}
 import org.http4s.implicits._
 
 class HttpServerSpec extends FastCGISpec {
@@ -33,20 +34,20 @@ class HttpServerSpec extends FastCGISpec {
   }
 
   def makeHttpApp(fastCGI: FastCGI[IO], scriptFilePath: Path): IO[HttpApp[IO]] = {
-    IO.pure(HttpApp[IO] { httpRequest =>
+    /*IO.pure(HttpApp[IO] { httpRequest =>
       for {
         fastCGIRequest  <- FastCGIRequest.wrap[IO](scriptFilePath)(httpRequest)
         fastCGIResponse <- fastCGI.run(fastCGIRequest)
       } yield fastCGIResponse.unwrap
-    })
+    })*/
 
-    /*IO.pure(HttpApp[IO] { httpRequest =>
+    IO.pure(HttpApp[IO] { httpRequest =>
       for {
         fastCGIRequest  <- FastCGIRequest[IO](List("SCRIPT_FILENAME" -> scriptFilePath.toString))
         fastCGIResponse <- fastCGI.run(fastCGIRequest)
         response         = Response[IO]().withBodyStream(fastCGIResponse.body)
       } yield response
-    })*/
+    })
 
   }
 

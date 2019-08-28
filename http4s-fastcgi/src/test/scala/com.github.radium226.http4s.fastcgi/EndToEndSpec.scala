@@ -1,7 +1,7 @@
 package com.github.radium226.http4s.fastcgi
 
 import cats.effect.IO
-import com.github.radium226.tools.Ansi
+import com.github.radium226.fastcgi.{FastCGI, FastCGIRequest}
 
 class EndToEndSpec extends FastCGISpec {
 

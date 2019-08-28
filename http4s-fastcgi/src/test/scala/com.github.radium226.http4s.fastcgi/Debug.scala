@@ -14,8 +14,6 @@ import org.apache.commons.io.HexDump
 
 object Debug {
 
-
-
   def hexDump[F[_]](implicit F: Concurrent[F], timer: Timer[F]): Pipe[F, Byte, Unit] = { bytes =>
     for {
       bytesRef <- Stream.eval(Ref.of[F, List[Byte]](List.empty[Byte]))
