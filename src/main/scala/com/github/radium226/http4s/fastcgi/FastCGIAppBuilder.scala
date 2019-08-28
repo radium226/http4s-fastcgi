@@ -14,6 +14,10 @@ class FastCGIAppBuilder[F[_]](socketFilePath: Path, params: FastCGIParams) {
     new FastCGIAppBuilder[F](socketFilePath, params :+ param)
   }
 
+  def withParam(paramKey: FastCGIParamKey): FastCGIAppBuilder[F] = {
+    withParam(paramKey -> "")
+  }
+
   def withParam[A](paramKey: FastCGIParamKey, a: A)(implicit writer: FastCGIParamValueWriter[A]): FastCGIAppBuilder[F] = {
     new FastCGIAppBuilder[F](socketFilePath, FastCGIParam(paramKey, a).map(params :+ _).getOrElse(params))
   }

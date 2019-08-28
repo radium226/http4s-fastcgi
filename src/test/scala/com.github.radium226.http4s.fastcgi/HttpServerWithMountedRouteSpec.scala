@@ -8,8 +8,8 @@ import org.http4s.server.blaze.BlazeServerBuilder
 import org.http4s.server.Router
 
 import org.http4s.implicits._
-import com.github.radium226.fastcgi.implicits._
 import com.github.radium226.http4s.implicits._
+import com.github.radium226.http4s.fastcgi.implicits._
 
 
 class HttpServerWithMountedRouteSpec extends FastCGISpec {

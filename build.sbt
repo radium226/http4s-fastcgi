@@ -27,7 +27,7 @@ lazy val root = (project in file("."))
     libraryDependencies ++= Dependencies.apacheCommons,
     libraryDependencies ++= Dependencies.guava,
     libraryDependencies ++= Dependencies.jUnixSocket,
-    libraryDependencies ++= Dependencies.scallop,
+    libraryDependencies ++= Dependencies.scopt,
 
     resolvers += Resolver.sonatypeRepo("releases"),
     resolvers += Resolver.mavenLocal,
