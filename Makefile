@@ -68,12 +68,12 @@ supervisor:
 
 .PHONY: git-clone
 git-clone:
-	mkdir -p "$(WORK_FOLDER_PATH)/git-clone"
-	cd "$(WORK_FOLDER_PATH)/git-clone"
-	git clone "http://localhost:$(PORT)" "."
-	echo "Hello" >"World"
-	git add "World"
-	git commit -m "Hello, World! "
+	mkdir -p "$(WORK_FOLDER_PATH)/git-clone" && \
+	cd "$(WORK_FOLDER_PATH)/git-clone" && \
+	git clone "http://localhost:$(PORT)" "." && \
+	echo "TOTO" >"TOTO" && \
+	git add "TOTO" && \
+	git commit -m "Hello, TOTO! " && \
 	git push -u origin master
 
 .PHONY: curl
