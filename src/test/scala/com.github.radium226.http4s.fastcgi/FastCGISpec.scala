@@ -1,5 +1,6 @@
 package com.github.radium226.http4s.fastcgi
 
+import java.lang.{ ProcessBuilder => JavaProcessBuilder, Process => JavaProcess }
 import java.lang.ProcessBuilder.Redirect
 import java.nio.file.{Files, Path, Paths, StandardOpenOption}
 import java.net.Socket
@@ -23,11 +24,31 @@ import org.scalatest.{FlatSpec, Matchers}
 
 import scala.concurrent.duration._
 
+import sys.process._
+
 abstract class FastCGISpec extends FlatSpec with Matchers {
 
   implicit val timer: Timer[IO] = IO.timer(ExecutionContext.global)
 
   implicit val contextShift: ContextShift[IO] = IO.contextShift(ExecutionContext.global)
+
+  val gitDebug = Seq(
+    "GIT_SSH",
+    "GIT_TRACE",
+    "GIT_FLUSH",
+    "GIT_TRACE_PACK_ACCESS",
+    "GIT_TRACE_PACKET",
+    "GIT_TRACE_PERFORMANCE",
+    "GIT_TRACE_SETUP",
+    "GIT_CURL_VERBOSE",
+    "GIT_REFLOG_ACTION",
+    "GIT_NAMESPACE",
+    "GIT_DIFF_OPTS",
+    "GIT_EXTERNAL_DIFF",
+    "GIT_DIFF_PATH_COUNTER",
+    "GIT_DIFF_PATH_TOTAL",
+    "GIT_MERGE_VERBOSITY"
+  )
 
   private def scriptResource(folderPath: Path, content: String): Resource[IO, Path] = {
     Resource.make[IO, Path]({
@@ -43,9 +64,9 @@ abstract class FastCGISpec extends FlatSpec with Matchers {
 
   private def fcgiwrapResource(folderPath: Path): Resource[IO, Path] = {
     val socketFilePath = folderPath.resolve("fcgiwrap.sock")
-    (Resource.make[IO, (Process, Path)]({
+    (Resource.make[IO, (JavaProcess, Path)]({
       for {
-        process <- IO(new ProcessBuilder("fcgiwrap", "-f", "-c", "2", "-s", s"unix:${socketFilePath.toString}").directory(folderPath.toFile).inheritIO().start())
+        process <- IO(new JavaProcessBuilder("fcgiwrap", "-f", "-c", "2", "-s", s"unix:${socketFilePath.toString}").directory(folderPath.toFile).inheritIO().start())
         _       <- IO.sleep(1 second)
       } yield (process, socketFilePath)
     })({ _ => pkill("fcgiwrap") /**> IO(Files.delete(socketFilePath))*/ }))
@@ -56,7 +77,7 @@ abstract class FastCGISpec extends FlatSpec with Matchers {
 
   private def pkill(pattern: String): IO[Unit] = {
     IO({
-      new ProcessBuilder("pkill", pattern).start().waitFor()
+      new JavaProcessBuilder("pkill", pattern).start().waitFor()
     })
   }
 
@@ -100,6 +121,21 @@ abstract class FastCGISpec extends FlatSpec with Matchers {
           s"${color}${line}${Color.reset}"
         })
         .showLinesStdOut
+  }
+
+  def initRepo(): IO[Path] = {
+    for {
+      remoteRepoFolderPath <- IO(Files.createTempDirectory("git-remote-repo"))
+      _                    <- IO(Seq("git", "init", "--bare", remoteRepoFolderPath.toString, "--shared") !)
+      _                    <- IO(Seq("git", "config", "--file", remoteRepoFolderPath.resolve("config").toString, "http.receivepack", "true") !)
+    } yield remoteRepoFolderPath
+  }
+
+  def cloneRepo(host: String, port: Int): IO[Path] = {
+    for {
+      localRepoFolderPath <- IO(Files.createTempDirectory("git-local-repo"))
+      _                   <- IO(Seq("env", "--") ++ gitDebug.map({ v => s"${v}=1" }) ++ Seq("git", "clone", s"http://${host}:${port}/", localRepoFolderPath.toString) !)
+    } yield localRepoFolderPath
   }
 
 }

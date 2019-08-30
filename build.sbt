@@ -14,7 +14,9 @@ ThisBuild / scalacOptions ++= Seq(
   "-language:higherKinds",
   "-Ypartial-unification")
 
-lazy val root = (project in file("."))
+lazy val `system` = RootProject(file("../system-scala"))
+
+lazy val `root` = (project in file("."))
   .settings(
     name := "http4s-fastcgi",
 
@@ -36,3 +38,4 @@ lazy val root = (project in file("."))
 
     addCompilerPlugin(CompilerPlugins.kindProjector)
   )
+  .dependsOn(`system`)

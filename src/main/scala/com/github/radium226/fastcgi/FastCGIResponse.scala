@@ -27,11 +27,11 @@ object FastCGIResponse {
     )
   }
 
-  private[fastcgi] def iterateOverChunks[F[_]](implicit F: Concurrent[F]): Pipe[F, Byte, Byte] = {
+  private[fastcgi] def mergeFrames[F[_]](implicit F: Concurrent[F]): Pipe[F, Byte, Byte] = {
     sealed trait State
     object State {
 
-      case class Iterate(padding: Int) extends State
+      case object Iterate extends State
 
       case class Stdout(length: Int, padding: Int) extends State
 
@@ -45,9 +45,8 @@ object FastCGIResponse {
 
     def go(stream: Stream[F, Byte], state: State): Pull[F, Byte, Unit] = {
       state match {
-        case Iterate(padding) =>
-          println(s"padding=${padding}")
-          stream.drop(padding).chunkN(8, true).map(_.toArray).pull.uncons1.flatMap({
+        case Iterate =>
+          stream.chunkN(8, true).map(_.toArray).pull.uncons1.flatMap({
             case Some((bytes, stream)) =>
               val unsignedIntegers = bytes.map(_ & 0xff)
               val version: Int = unsignedIntegers(0)
@@ -67,12 +66,12 @@ object FastCGIResponse {
                 case FastCGI.endRequest =>
                   go(stream.flatMap({ bytes => Stream.chunk(Chunk.array(bytes)) }), EndRequest)
 
-                case _ =>
-                  println("Unknown type")
+                case t =>
+                  println(s"Unknown type (t=${t})")
                   Pull.raiseError[F](new IllegalStateException())
               }
             case None =>
-              Pull.raiseError[F](new IllegalStateException)
+              Pull.done
           })
 
         case EndRequest =>
@@ -81,14 +80,18 @@ object FastCGIResponse {
               val applicationStatus: Int = (endRequestHeaderBytes(0) << 24) + (endRequestHeaderBytes(1) << 16) + (endRequestHeaderBytes(2) << 8) + endRequestHeaderBytes(3)
               val processStatus: Int = endRequestHeaderBytes(4)
               println(s"applicationStatus=${applicationStatus} / processStatus=${processStatus}")
-              Pull.done
+              go(stream.flatMap({ bytes => Stream.chunk(Chunk.array(bytes)) }), Iterate)
             case None =>
+              println("Youpila")
               Pull.raiseError[F](new IllegalStateException)
           })
 
 
+
+
         case Stdout(0, padding) =>
-          go(stream, Iterate(padding))
+          println(s"Yay, padding is here = ${padding}")
+          go(stream.drop(padding), Iterate)
 
         case Stdout(length, padding) =>
           stream.pull.uncons1.flatMap({
@@ -98,12 +101,13 @@ object FastCGIResponse {
                 _ <- go(stream, Stdout(length - 1, padding))
               } yield ()
             case None =>
-              println("We are here! ")
+              println("We are here! 2.")
               Pull.raiseError[F](new IllegalStateException())
           })
 
         case Stderr(0, padding) =>
-          go(stream, Iterate(padding))
+          println(s"Yay, padding is here = ${padding}")
+          go(stream.drop(padding), Iterate)
 
         case Stderr(length, padding) =>
           stream.pull.uncons1.flatMap({
@@ -113,7 +117,7 @@ object FastCGIResponse {
                 _ <- go(stream, Stderr(length - 1, padding))
               } yield ()
             case None =>
-              println("We are here! ")
+              println("We are here! 3.")
               Pull.raiseError[F](new IllegalStateException())
           })
 
@@ -122,7 +126,7 @@ object FastCGIResponse {
     }
 
     { bytes =>
-      go(bytes, Iterate(0)).stream
+      go(bytes, Iterate).stream
     }
   }
 
@@ -150,6 +154,7 @@ object FastCGIResponse {
                   go(stream, State.Header(response, Some(s"${name}${char}"), None))
               }
             case None =>
+              println("IllegalStateException 1.")
               Pull.raiseError[F](new IllegalArgumentException)
           })
 
@@ -163,10 +168,11 @@ object FastCGIResponse {
                     _ <- go(stream.drop(1), State.Body)
                   } yield ()
                 case char =>
-                  println(s"char=${char}")
+                  //println(s"char=${char}")
                   go(stream, State.Header(response, Some(s"${char}"), None))
               }
             case None =>
+              println("IllegalStateException 2.")
               Pull.raiseError[F](new IllegalStateException())
           })
         // Parsing header value
@@ -188,6 +194,7 @@ object FastCGIResponse {
                   go(stream, State.Header(response, Some(name), Some(value :+ char)))
               }
             case None =>
+              println("IllegalStateException 3.")
               Pull.raiseError[F](new IllegalStateException())
           })
 
@@ -218,7 +225,7 @@ object FastCGIResponse {
     for {
       responseWithoutBodyBridge <- Bridge.start[F, FastCGIResponse[F]]
       responseBodyBridge        <- Bridge.start[F, Byte]
-      _                         <- F.start(bytes.through(iterateOverChunks).through(pushResponseWithBodyAndResponseBody(responseWithoutBodyBridge, responseBodyBridge)).compile.drain)
+      _                         <- F.start(bytes.through(mergeFrames).through(pushResponseWithBodyAndResponseBody(responseWithoutBodyBridge, responseBodyBridge)).compile.drain)
       responseWithoutBody       <- responseWithoutBodyBridge.pull1
       responseBody               = responseBodyBridge.pull
       response                   = responseWithoutBody.withBody(responseBody)

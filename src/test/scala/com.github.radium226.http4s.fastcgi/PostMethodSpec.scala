@@ -10,13 +10,13 @@ import org.http4s.server.blaze.BlazeServerBuilder
 import scala.concurrent.duration._
 import scala.sys.process._
 
-class HttpServerSpec extends FastCGISpec {
+class PostMethodSpec extends FastCGISpec {
 
   "FastCGI" should "work with an HTTP server" in withFCGIWrap(
     s"""#!/bin/bash
        |echo "Content-Type: text/plain"
        |echo
-       |echo -n -e '${"\\x66" * 1000 }'
+       |cat
        |exit 0
     """.stripMargin)({ case (scriptFilePath, fastCGISocketFilePath) =>
       val fastCGI = FastCGI[IO](fastCGISocketFilePath)
@@ -34,7 +34,7 @@ class HttpServerSpec extends FastCGISpec {
         .resource.use({ _ =>
           for {
             _ <- IO.sleep(1 second)
-            _ <- IO(Seq("curl", s"http://localhost:${port}") !)
+            _ <- IO(Seq("curl", "-X", "POST", s"http://localhost:${port}", "-d", "a" * 10000 + "k") !)
             _ <- IO.sleep(1 second)
           } yield ()
     })
@@ -52,7 +52,7 @@ class HttpServerSpec extends FastCGISpec {
       for {
         fastCGIRequest         <- FastCGIRequest[IO](List(
           "SCRIPT_FILENAME" -> scriptFilePath.toString, //"/usr/lib/git-core/git-http-backend",
-          "REQUEST_METHOD" -> "GET",
+          "REQUEST_METHOD" -> "POST",
           "QUERY_STRING" -> httpRequest.queryString
         ))
         fastCGIRequestWithBody  = fastCGIRequest.withBody(httpRequest.body)

@@ -4,11 +4,14 @@ import java.net.Socket
 import java.nio.file._
 
 import cats.effect._
-import cats.implicits._
 import com.github.radium226.ansi.Color
 import com.github.radium226.fs2.debug.HexDump
+import com.github.radium226.system.execute.Executor
 import fs2._
 import org.newsclub.net.unix.{AFUNIXSocket, AFUNIXSocketAddress}
+
+import cats._
+import cats.implicits._
 
 case class FastCGI[F[_]](socketFilePath: Path) {
 
@@ -54,6 +57,18 @@ object FastCGI {
         s"${color}${line}${Color.reset}"
       })
       .showLinesStdOut
+  }
+
+  def wrapper[F[_]](implicit F: Sync[F]): Resource[F, FastCGI[F]] = {
+    for {
+      socketFilePath <- Resource.make[F, Path](for {
+        socketFilePath <- F.delay(Files.createTempFile("fcgiwrap", ".sock"))
+        _              <- F.delay(Files.delete(socketFilePath))
+      } yield socketFilePath)({ socketFilePath =>
+        F.delay(Files.delete(socketFilePath))
+      })
+      _              <- Executor[F].execute("fcgiwrap", "-f", "-c", "2", "-s", s"unix:${socketFilePath.toString}").resource
+    } yield new FastCGI[F](socketFilePath)
   }
 
 }

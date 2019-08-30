@@ -21,11 +21,12 @@ class HttpServerWithMountedRouteSpec extends FastCGISpec {
        |echo "Hello!"
        |exit 0
     """.stripMargin)({ case (scriptFilePath, fastCGISocketFilePath) =>
-    val httpApp = makeHttpApp(fastCGISocketFilePath, scriptFilePath)
-    val router = Router[IO](
-      "/hello" -> httpApp.routes
-    )
-    serve(router.orNotFound)
+    makeHttpApp(fastCGISocketFilePath, scriptFilePath).use({ httpApp =>
+      val router = Router[IO](
+        "/hello" -> httpApp.routes
+      )
+      serve(router.orNotFound)
+    })
   })
 
   def serve(httpApp: HttpApp[IO]): IO[Unit] = {
@@ -35,7 +36,7 @@ class HttpServerWithMountedRouteSpec extends FastCGISpec {
         .resource.use(_ => IO.never)
   }
 
-  def makeHttpApp(socketFilePath: Path, scriptFilePath: Path): HttpApp[IO] = {
+  def makeHttpApp(socketFilePath: Path, scriptFilePath: Path): Resource[IO, HttpApp[IO]] = {
     FastCGIAppBuilder[IO]
       .withSocket(socketFilePath)
       .withParam("SCRIPT_FILENAME", scriptFilePath)

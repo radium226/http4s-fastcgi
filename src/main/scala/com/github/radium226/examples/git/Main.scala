@@ -17,12 +17,22 @@ import cats.implicits._
 
 object Main extends IOApp {
 
-  case class Config(folderPath: Path, port: Int)
+  case class Config(folderPath: Option[Path], port: Int)
 
   object Config {
 
-    def default: Config = Config(null, 8080)
+    def default: Config = Config(None, 8082)
 
+  }
+
+  def execute(command: String*): IO[Unit] = {
+    IO(command !).flatMap({
+      case 0 =>
+        IO.unit
+
+      case exitCode =>
+        IO.raiseError(new Exception(s"${command.mkString(" ")} terminated with ${exitCode}"))
+    })
   }
 
   def loadConfig(arguments: List[String]): IO[Config] = {
@@ -36,9 +46,8 @@ object Main extends IOApp {
           }),
 
         opt[Path]("folder")
-          .required()
           .action({ (folderPath, arguments) =>
-            arguments.copy(folderPath = folderPath)
+            arguments.copy(folderPath = Some(folderPath))
           })
       )
 
@@ -63,21 +72,23 @@ object Main extends IOApp {
   def initRepo(folderPath: Path): IO[Unit] = {
     for {
       _ <- IO(Files.createDirectories(folderPath))
-      _ <- IO(Seq("git", "init", "--bare", folderPath.resolve("git").toString, "--shared") !)
-      _ <- IO(Seq("git", "config", "--file", folderPath.resolve("git").resolve("config").toString, "http.receivepack", "true") !)
+      _ <- execute("git", "init", "--bare", folderPath.toString, "--shared")
+      _ <- execute("git", "config", "--file", folderPath.resolve("config").toString, "http.receivepack", "true")
     } yield ()
   }
 
   override def run(arguments: List[String]): IO[ExitCode] = {
     for {
-      config  <- loadConfig(arguments)
-      _       <- initRepo(config.folderPath)
-      httpApp  = FastCGIAppBuilder[IO]
-                   .withParam("SCRIPT_FILENAME", Paths.get("/usr/lib/git-core/git-http-backend"))
-                   .withParam("GIT_PROJECT_ROOT", config.folderPath)
-                   .withParam("GIT_EXPORT_ALL")
-                   .build
-      _       <- serve(config.port, httpApp)
+      config     <- loadConfig(arguments)
+      folderPath <- config.folderPath.map(IO.pure).getOrElse(IO(Files.createTempDirectory("git-repo")))
+      _          <- IO(println(s"folderPath=${folderPath}"))
+      _          <- initRepo(folderPath)
+      _          <- execute("ls", "-alrt", folderPath.toString)
+      _          <- FastCGIAppBuilder[IO]
+                     .withParam("SCRIPT_FILENAME", Paths.get("/usr/lib/git-core/git-http-backend"))
+                     .withParam(("GIT_PROJECT_ROOT", folderPath.toString))
+                     .withParam(("GIT_HTTP_EXPORT_ALL", ""))
+                     .build.use(serve(config.port, _))
     } yield ExitCode.Success
   }
 

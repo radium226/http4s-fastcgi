@@ -1,11 +1,11 @@
 package com.github.radium226.fastcgi
 
+import java.io.{ByteArrayOutputStream, DataOutputStream}
 import java.nio.file.Path
 
 import cats.effect._
 import cats.effect.concurrent._
 import fs2._
-
 import cats.implicits._
 
 
@@ -25,6 +25,10 @@ class FastCGIRequest[F[_]](params: FastCGIParams, body: Stream[F, Byte], request
 
   implicit def shortToByte(s: Short): Byte = s.toByte
 
+  def withBody(body: FastCGIBody[F]): FastCGIRequest[F] = {
+    new FastCGIRequest[F](params, body, requestIDMVar)
+  }
+
   def record(t: Int, l: Int): Stream[F, Byte] = {
     for {
       i <- Stream.eval[F, Short](requestIDMVar.read)
@@ -40,22 +44,30 @@ class FastCGIRequest[F[_]](params: FastCGIParams, body: Stream[F, Byte], request
     Stream[F, Byte](s.getBytes(): _*)
   }
 
-  def param(p: FastCGIParam): Stream[F, Byte] = {
+  def param(p: FastCGIParam): Array[Byte] = {
     val (k, v) = p
     println(s"k=${k} / v=${v}")
     param(k, v)
   }
 
-  def param(k: String, v: String): Stream[F, Byte] = {
-    val kl = k.length
-    val vl = v.length
-    val l = (kl + vl) + (if (kl < 0x80) 1 else 4) + (if (vl < 0x80) 1 else 4)
+  def param(k: String, v: String): Array[Byte] = {
+    val byteArrayOutputStream = new ByteArrayOutputStream()
+    val dataOutputStream = new DataOutputStream(byteArrayOutputStream)
 
-    record(FastCGI.params, l) ++
-    length(kl) ++
-    length(vl) ++
-    content(k) ++
-    content(v)
+    val kl = k.length
+    if (kl < 128) dataOutputStream.writeByte(kl)
+    else dataOutputStream.writeLong(kl | 0x80000000)
+
+    val vl = v.length
+    if (vl < 128) dataOutputStream.writeByte(vl)
+    else dataOutputStream.writeLong(vl | 0x80000000)
+
+    dataOutputStream.writeBytes(k)
+    dataOutputStream.writeBytes(v)
+
+    val byteArray = byteArrayOutputStream.toByteArray
+
+    byteArray
   }
 
   def role(r: Int): Stream[F, Byte] = {
@@ -67,13 +79,18 @@ class FastCGIRequest[F[_]](params: FastCGIParams, body: Stream[F, Byte], request
   }
 
   def stream: Stream[F, Byte] = {
+    val paramBytes = params.foldLeft[Array[Byte]](Array.empty) { (s, p) => s ++ param(p) }
+    val paramStream = Stream[F, Byte](paramBytes:_ *)
+    val paramByteCount = paramBytes.length
+
     record(FastCGI.beginRequest, 8) ++
     role(FastCGI.responder) ++
     keepConnected(false) ++
     Stream[F, Byte](0).repeatN(5) ++
-    params.foldLeft[Stream[F, Byte]](Stream.empty) { (s, p) => s ++ param(p) } ++
+    record(FastCGI.params, paramByteCount) ++
+    paramStream ++
     record(FastCGI.params, 0) ++
-    body.chunks.flatMap({ c => record(FastCGI.stdin, c.size) ++ Stream.chunk(c) }) ++ record(FastCGI.stdin, 0)
+    body./*map({ u => println(u) ; u }).*/chunks.flatMap({ c => record(FastCGI.stdin, c.size) ++ Stream.chunk(c) }) ++ record(FastCGI.stdin, 0)
   }
 
 }

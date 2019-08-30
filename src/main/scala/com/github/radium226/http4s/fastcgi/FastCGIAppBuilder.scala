@@ -8,7 +8,7 @@ import com.github.radium226.fastcgi._
 import cats.implicits._
 
 
-class FastCGIAppBuilder[F[_]](socketFilePath: Path, params: FastCGIParams) {
+class FastCGIAppBuilder[F[_]](socketFilePath: Option[Path], params: FastCGIParams) {
 
   def withParam(param: FastCGIParam): FastCGIAppBuilder[F] = {
     new FastCGIAppBuilder[F](socketFilePath, params :+ param)
@@ -23,30 +23,37 @@ class FastCGIAppBuilder[F[_]](socketFilePath: Path, params: FastCGIParams) {
   }
 
   def withSocket(socketFilePath: Path): FastCGIAppBuilder[F] = {
-    new FastCGIAppBuilder[F](socketFilePath, params)
+    new FastCGIAppBuilder[F](Some(socketFilePath), params)
   }
 
-  def build(implicit F: Concurrent[F], contextShift: ContextShift[F]): HttpApp[F] = {
-    val fastCGI = FastCGI[F](socketFilePath)
-    HttpApp { request =>
-      for {
-        fastCGIRequest  <- writeRequest(request)
-        fastCGIResponse <- fastCGI.run(fastCGIRequest)
-        response        <- readResponse(fastCGIResponse)
-      } yield response
-    }
+  def build(implicit F: Concurrent[F], contextShift: ContextShift[F]): Resource[F, HttpApp[F]] = {
+    socketFilePath
+      .map({ socketFilePath =>
+        Resource.liftF[F, FastCGI[F]](F.pure(FastCGI[F](socketFilePath)))
+      })
+      .getOrElse(FastCGI.wrapper[F])
+      .flatMap({ fastCGI =>
+        Resource.liftF(F.pure(HttpApp[F] { request =>
+          for {
+            fastCGIRequest  <- writeRequest(request)
+            fastCGIResponse <- fastCGI.run(fastCGIRequest)
+            response        <- readResponse(fastCGIResponse)
+          } yield response
+        }))
+      })
   }
 
   def readResponse(response: FastCGIResponse[F])(implicit F: Sync[F]): F[Response[F]] = {
-    F.pure(Response[F](
-      headers = Headers(response.headers.map({ case (name, value) => Header(name, value).parsed })),
-      body = response.body
-    ))
+    val headers = Headers(response.headers.map({ case (name, value) => Header(name, value).parsed }))
+    println(s"headers=${headers}")
+    F.pure(Response[F]()
+      .withHeaders(headers)
+      .withBodyStream(response.body))
   }
 
   def writeRequest(request: Request[F])(implicit F: Concurrent[F]): F[FastCGIRequest[F]] = {
     FastCGIRequest[F](
-      params = params ++ FastCGIAppBuilder.paramWriters[F].map(_.apply(request)).collect({ case (key, Some(value)) => (key, value) }),
+      params = (params ++ FastCGIAppBuilder.paramWriters[F].map(_.apply(request)).collect({ case (key, Some(value)) => (key, value) })).map({ t => println(s"param=${t}") ; t }),
       body = request.body
     )
   }
@@ -57,6 +64,7 @@ object FastCGIAppBuilder {
 
   def paramWriters[F[_]]: List[FastCGIParamWriter[Request[F]]] = List(
     "REQUEST_METHOD" -> _.method.name.some,
+    "PATH_INFO" -> _.pathInfo.some,
     "QUERY_STRING" -> _.queryString.some,
     "CONTENT_TYPE" -> _.contentType.map(_.value),
     "CONTENT_LENGTH" -> _.contentLength.map(_.toString),
@@ -67,13 +75,11 @@ object FastCGIAppBuilder {
     "REMOTE_ADDR" -> _.remoteAddr,
     "REMOTE_PORT" -> _.remotePort.map(_.toString),
     "SERVER_ADDR" -> _.serverAddr.some,
-    "SERVER_PORT" -> _.serverPort.toString.some,
-    "PATH_INFO" -> _.pathInfo.some
-    // SERVER_NAME
+    "SERVER_PORT" -> _.serverPort.toString.some
   )
 
   def apply[F[_]]: FastCGIAppBuilder[F] = {
-    new FastCGIAppBuilder[F](Paths.get("/run/fcgiwrap.sock"), FastCGIParams.empty)
+    new FastCGIAppBuilder[F](None, FastCGIParams.empty)
   }
 
 }
