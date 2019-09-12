@@ -8,4 +8,10 @@ package object fastcgi {
 
   type FastCGIParamWriter[A] = A => (FastCGIParamKey, Option[FastCGIParamValue])
 
+  object FastCGIParamWriter {
+
+    def apply[A](f: FastCGIParamWriter[A]): FastCGIParamWriter[A] = f
+
+  }
+
 }

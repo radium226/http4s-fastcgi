@@ -11,8 +11,8 @@ import com.github.radium226.http4s.fastcgi._
 import sys.process._
 
 import com.github.radium226.http4s.fastcgi.implicits._
-import com.github.radium226.scopt.implicits._
 import cats.implicits._
+import com.github.radium226.scopt.implicits._
 
 
 object Main extends IOApp {

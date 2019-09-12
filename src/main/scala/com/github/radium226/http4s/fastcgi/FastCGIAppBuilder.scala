@@ -8,10 +8,10 @@ import com.github.radium226.fastcgi._
 import cats.implicits._
 
 
-class FastCGIAppBuilder[F[_]](socketFilePath: Option[Path], params: FastCGIParams) {
+class FastCGIAppBuilder[F[_]](socketFilePath: Option[Path], paramWriters: List[FastCGIParamWriter[Request[F]]]) {
 
   def withParam(param: FastCGIParam): FastCGIAppBuilder[F] = {
-    new FastCGIAppBuilder[F](socketFilePath, params :+ param)
+    withParam({ _ => (param._1, param._2.some) })
   }
 
   def withParam(paramKey: FastCGIParamKey): FastCGIAppBuilder[F] = {
@@ -19,11 +19,15 @@ class FastCGIAppBuilder[F[_]](socketFilePath: Option[Path], params: FastCGIParam
   }
 
   def withParam[A](paramKey: FastCGIParamKey, a: A)(implicit writer: FastCGIParamValueWriter[A]): FastCGIAppBuilder[F] = {
-    new FastCGIAppBuilder[F](socketFilePath, FastCGIParam(paramKey, a).map(params :+ _).getOrElse(params))
+    withParam(paramKey, writer(a))
+  }
+
+  def withParam(paramWriter: FastCGIParamWriter[Request[F]]): FastCGIAppBuilder[F] = {
+    new FastCGIAppBuilder[F](socketFilePath, paramWriters :+ paramWriter)
   }
 
   def withSocket(socketFilePath: Path): FastCGIAppBuilder[F] = {
-    new FastCGIAppBuilder[F](Some(socketFilePath), params)
+    new FastCGIAppBuilder[F](Some(socketFilePath), paramWriters)
   }
 
   def build(implicit F: Concurrent[F], contextShift: ContextShift[F]): Resource[F, HttpApp[F]] = {
@@ -53,7 +57,7 @@ class FastCGIAppBuilder[F[_]](socketFilePath: Option[Path], params: FastCGIParam
 
   def writeRequest(request: Request[F])(implicit F: Concurrent[F]): F[FastCGIRequest[F]] = {
     FastCGIRequest[F](
-      params = (params ++ FastCGIAppBuilder.paramWriters[F].map(_.apply(request)).collect({ case (key, Some(value)) => (key, value) })).map({ t => println(s"param=${t}") ; t }),
+      params = paramWriters.map(_.apply(request)).collect({ case (key, Some(value)) => (key, value) }).map({ t => println(s"param=${t}") ; t }),
       body = request.body
     )
   }
@@ -79,7 +83,7 @@ object FastCGIAppBuilder {
   )
 
   def apply[F[_]]: FastCGIAppBuilder[F] = {
-    new FastCGIAppBuilder[F](None, FastCGIParams.empty)
+    new FastCGIAppBuilder[F](None, paramWriters)
   }
 
 }
