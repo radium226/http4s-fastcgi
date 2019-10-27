@@ -76,8 +76,10 @@ class FirstSpec extends FastCGISpec {
   })
 
   def pipe(socket: Socket): Pipe[IO, Byte, Byte] = { inputBytes =>
-    fs2.io.readInputStream[IO](IO(socket.getInputStream), 1, ExecutionContext.global)
-      .concurrently(inputBytes.through(fs2.io.writeOutputStream[IO](IO(socket.getOutputStream), ExecutionContext.global)))
+    Stream.resource[IO, Blocker](Blocker[IO]).flatMap({ blocker =>
+      fs2.io.readInputStream[IO](IO(socket.getInputStream), 1, blocker)
+        .concurrently(inputBytes.through(fs2.io.writeOutputStream[IO](IO(socket.getOutputStream), blocker)))
+    })
   }
 
 }

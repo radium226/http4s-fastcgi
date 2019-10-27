@@ -1,6 +1,6 @@
 package com.github.radium226.http4s.fastcgi
 
-import java.lang.{ ProcessBuilder => JavaProcessBuilder, Process => JavaProcess }
+import java.lang.{Process => JavaProcess, ProcessBuilder => JavaProcessBuilder}
 import java.lang.ProcessBuilder.Redirect
 import java.nio.file.{Files, Path, Paths, StandardOpenOption}
 import java.net.Socket
@@ -20,10 +20,9 @@ import com.github.radium226.ansi._
 import com.google.common.io.{MoreFiles, RecursiveDeleteOption}
 import fs2.Pipe
 import org.newsclub.net.unix.{AFUNIXSocket, AFUNIXSocketAddress}
-import org.scalatest.{FlatSpec, Matchers}
+import org.scalatest._
 
 import scala.concurrent.duration._
-
 import sys.process._
 
 abstract class FastCGISpec extends FlatSpec with Matchers {

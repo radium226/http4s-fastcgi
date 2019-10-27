@@ -51,11 +51,11 @@ object Dependencies {
   )
 
   lazy val scalatic = Seq(
-    "org.scalactic" %% "scalactic" % "3.2.0-M1"
+    "org.scalactic" %% "scalactic" % "3.0.8"
   )
 
   lazy val scalaTest = Seq(
-    "org.scalatest" %% "scalatest" % "3.2.0-M1"
+    "org.scalatest" %% "scalatest" % "3.0.8"
   )
 
   lazy val guava = Seq(
