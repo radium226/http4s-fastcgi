@@ -5,7 +5,7 @@ import java.nio.file._
 
 import cats.effect._
 import com.github.radium226.ansi.Color
-import com.github.radium226.fs2.debug.HexDump
+import com.github.radium226.fs2.debug.HexDump2
 import com.github.radium226.system.execute.Executor
 import fs2._
 import org.newsclub.net.unix.{AFUNIXSocket, AFUNIXSocketAddress}
@@ -52,7 +52,7 @@ object FastCGI {
   val requestComplete: Byte = 0
 
   def hexDump[F[_]](color: Color)(implicit F: Concurrent[F]): Pipe[F, Byte, Unit] = { bytes =>
-    bytes.through(HexDump[F].write)
+    bytes.through(HexDump2[F].write)
       .map({ line =>
         s"${color}${line}${Color.reset}"
       })

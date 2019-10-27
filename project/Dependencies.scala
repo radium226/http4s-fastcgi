@@ -8,7 +8,7 @@ object Dependencies {
   )
 
   lazy val dbus = Seq(
-    "com.github.hypfvieh" % "dbus-java" % "3.0.0",
+    "com.github.hypfvieh" % "dbus-java" % "3.0.0"
   )
 
   lazy val fs2 = Seq(

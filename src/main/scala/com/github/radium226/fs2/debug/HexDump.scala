@@ -1,5 +1,7 @@
 package com.github.radium226.fs2.debug
 
+import _root_.org.apache.commons.io.{ HexDump => HD}
+
 import java.io.ByteArrayOutputStream
 import java.nio.file.Paths
 
@@ -7,11 +9,10 @@ import cats.effect._
 import cats.effect.concurrent._
 import cats.implicits._
 import fs2._
-import org.apache.commons.io.{HexDump => HD}
 
 import scala.concurrent.ExecutionContext
 
-case class HexDump[F[_]]() {
+case class HexDump2[F[_]]() {
 
   def write(implicit F: Concurrent[F]): Pipe[F, Byte, String] = { bytes =>
     for {
