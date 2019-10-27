@@ -3,7 +3,7 @@ import sbt.Keys.libraryDependencies
 logLevel := Level.Debug
 
 ThisBuild / organization := "com.github.radium226"
-ThisBuild / scalaVersion := "2.12.7"
+ThisBuild / scalaVersion := "2.13.1"
 ThisBuild / version      := "0.1-SNAPSHOT"
 
 ThisBuild / scalacOptions ++= Seq(
@@ -11,8 +11,7 @@ ThisBuild / scalacOptions ++= Seq(
   "-deprecation",
   "-unchecked",
   "-language:postfixOps",
-  "-language:higherKinds",
-  "-Ypartial-unification")
+  "-language:higherKinds")
 
 lazy val `system` = RootProject(file("../system-scala"))
 
