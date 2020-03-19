@@ -15,7 +15,7 @@ import java.nio.file.attribute.PosixFilePermissions
 import java.util
 
 import cats.implicits._
-import com.github.radium226.fs2.debug.HexDump
+import com.github.radium226.fs2.debug.HexDump2
 import com.github.radium226.ansi._
 import com.google.common.io.{MoreFiles, RecursiveDeleteOption}
 import fs2.Pipe
@@ -115,7 +115,7 @@ abstract class FastCGISpec extends FlatSpec with Matchers {
   }
 
   def hexDump(color: Color): Pipe[IO, Byte, Unit] = { bytes =>
-    bytes.through(HexDump[IO].write)
+    bytes.through(HexDump2[IO].write)
         .map({ line =>
           s"${color}${line}${Color.reset}"
         })
